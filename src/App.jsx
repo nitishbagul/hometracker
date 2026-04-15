@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase } from "./lib/supabase";
+import { api } from "./lib/api";
 
 /* ─── HELPERS ────────────────────────────────────────────────────────────── */
 const fmt = iso => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -93,10 +94,7 @@ function Toast({ msg, type = "error" }) {
 function Modal({ modal, onClose, db, allPlaces, fns }) {
   const [val, setVal] = useState("");
   const [pid, setPid] = useState(() => {
-    if (modal.type === "move_item") {
-      const item = db.items.find(i => i.id === modal.itemId);
-      return item?.place_id || "";
-    }
+    if (modal.type === "move_item") return db.items.find(i => i.id === modal.itemId)?.place_id || "";
     return modal.targetPlaceId || "";
   });
   const [iid, setIid] = useState(modal.itemId || "");
@@ -105,27 +103,30 @@ function Modal({ modal, onClose, db, allPlaces, fns }) {
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 50); }, []);
 
   const cfg = {
-    add_house: { title: "Add house", ph: "e.g. My home, Weekend cabin" },
-    add_section: { title: "Add room / section", ph: "e.g. Master bedroom, Kitchen, Garage" },
-    add_place: { title: "Add storage place", ph: "e.g. Closet, Top drawer, Shelf B" },
-    add_item: { title: "Add item", ph: "e.g. Car spare keys, Old photo album" },
-    move_item: { title: modal.itemId ? "Place / move item" : "Move item to this place" },
+    add_house:   { title: "Add house",           ph: "e.g. My home, Weekend cabin" },
+    add_section: { title: "Add room / section",  ph: "e.g. Master bedroom, Kitchen, Garage" },
+    add_place:   { title: "Add storage place",   ph: "e.g. Closet, Top drawer, Shelf B" },
+    add_item:    { title: "Add item",             ph: "e.g. Car spare keys, Old photo album" },
+    move_item:   { title: modal.itemId ? "Place / move item" : "Move item to this place" },
   };
 
   const submit = async () => {
     if (modal.type !== "move_item" && !val.trim()) return;
     setLoading(true);
-    if (modal.type === "add_house") await fns.addHouse(val.trim());
-    else if (modal.type === "add_section") await fns.addSection(modal.houseId, val.trim());
-    else if (modal.type === "add_place") await fns.addPlace(modal.sectionId, val.trim());
-    else if (modal.type === "add_item") await fns.addItem(val.trim());
-    else if (modal.type === "move_item") await fns.moveItem(modal.itemId || iid, pid || null);
+    try {
+      if (modal.type === "add_house")   await fns.addHouse(val.trim());
+      else if (modal.type === "add_section") await fns.addSection(modal.houseId, val.trim());
+      else if (modal.type === "add_place")   await fns.addPlace(modal.sectionId, val.trim());
+      else if (modal.type === "add_item")    await fns.addItem(val.trim());
+      else if (modal.type === "move_item")   await fns.moveItem(modal.itemId || iid, pid || null);
+      onClose();
+    } catch (e) {
+      fns.showToast(e.message);
+    }
     setLoading(false);
-    onClose();
   };
 
   const isMove = modal.type === "move_item";
-  const unplacedItems = db.items.filter(i => !modal.targetPlaceId || i.place_id !== modal.targetPlaceId);
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, backdropFilter: "blur(2px)" }}
@@ -187,7 +188,6 @@ function AuthPage({ onLogin, onRegister, error, loading }) {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const submit = () => mode === "login" ? onLogin(email, password) : onRegister(email, password);
 
   return (
@@ -219,11 +219,6 @@ function AuthPage({ onLogin, onRegister, error, loading }) {
           <Btn variant="primary" onClick={submit} full size="lg" disabled={loading}>
             {loading ? "Please wait…" : mode === "login" ? "Sign in →" : "Create account →"}
           </Btn>
-          {mode === "register" && (
-            <p style={{ fontSize: 12, color: T.muted, marginTop: 10, textAlign: "center", lineHeight: 1.5 }}>
-              A confirmation email may be sent depending on your Supabase settings.
-            </p>
-          )}
         </div>
       </div>
     </div>
@@ -234,8 +229,8 @@ function AuthPage({ onLogin, onRegister, error, loading }) {
 function Sidebar({ view, setView, user, onLogout, search, setSearch, searchResults, db, itemLoc }) {
   const nav = [
     { id: "dashboard", icon: "⌂", label: "Houses" },
-    { id: "items", icon: "◫", label: "All items" },
-    { id: "activity", icon: "◷", label: "Activity" },
+    { id: "items",     icon: "◫", label: "All items" },
+    { id: "activity",  icon: "◷", label: "Activity" },
   ];
   return (
     <div style={{ width: 228, background: T.bgSidebar, borderRight: `1px solid ${T.border}`, display: "flex", flexDirection: "column", minHeight: "100vh", flexShrink: 0 }}>
@@ -563,6 +558,7 @@ export default function App() {
   const [modal, setModal] = useState(null);
   const [search, setSearch] = useState("");
   const [appLoading, setAppLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authErr, setAuthErr] = useState("");
   const [toast, setToast] = useState({ msg: "", type: "error" });
@@ -572,19 +568,17 @@ export default function App() {
     setTimeout(() => setToast({ msg: "", type: "error" }), 3500);
   };
 
-  // ── Load all user data ─────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
-    const [h, s, p, i, a] = await Promise.all([
-      supabase.from("houses").select("*").order("created_at"),
-      supabase.from("sections").select("*").order("created_at"),
-      supabase.from("places").select("*").order("created_at"),
-      supabase.from("items").select("*").order("created_at"),
-      supabase.from("activity").select("*").order("created_at", { ascending: false }).limit(300),
-    ]);
-    setDb({ houses: h.data || [], sections: s.data || [], places: p.data || [], items: i.data || [], acts: a.data || [] });
+    setDataLoading(true);
+    try {
+      const data = await api.getData();
+      setDb(data);
+    } catch (e) {
+      showToast("Failed to load data: " + e.message);
+    }
+    setDataLoading(false);
   }, []);
 
-  // ── Auth session on mount ──────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) { setUser(session.user); loadData(); }
@@ -597,13 +591,6 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, [loadData]);
 
-  // ── Log activity helper ────────────────────────────────────────────────────
-  const logAct = async (type, description, metadata = {}) => {
-    const { data } = await supabase.from("activity").insert({ type, description, metadata }).select().single();
-    if (data) setDb(prev => ({ ...prev, acts: [data, ...prev.acts].slice(0, 300) }));
-  };
-
-  // ── Auth ───────────────────────────────────────────────────────────────────
   const doLogin = async (email, password) => {
     setAuthLoading(true); setAuthErr("");
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -614,100 +601,91 @@ export default function App() {
     setAuthLoading(true); setAuthErr("");
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) setAuthErr(error.message);
-    else setAuthErr(""); // onAuthStateChange handles the rest
     setAuthLoading(false);
   };
   const doLogout = () => supabase.auth.signOut();
 
-  // ── Houses ─────────────────────────────────────────────────────────────────
+  // ── CRUD handlers ──────────────────────────────────────────────────────────
+
   const addHouse = async (name) => {
-    const { data, error } = await supabase.from("houses").insert({ name }).select().single();
-    if (error) { showToast(error.message); return; }
-    setDb(prev => ({ ...prev, houses: [...prev.houses, data] }));
-    logAct("house", `Created house "${name}"`);
+    const house = await api.addHouse(name);
+    setDb(prev => ({ ...prev, houses: [...prev.houses, house] }));
+    api.logActivity("house", `Created house "${name}"`).then(act =>
+      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
   };
+
   const delHouse = async (id) => {
     const name = db.houses.find(h => h.id === id)?.name;
-    const { error } = await supabase.from("houses").delete().eq("id", id);
-    if (error) { showToast(error.message); return; }
+    await api.deleteHouse(id);
     const sIds = db.sections.filter(s => s.house_id === id).map(s => s.id);
     const pIds = db.places.filter(p => sIds.includes(p.section_id)).map(p => p.id);
     setDb(prev => ({ ...prev, houses: prev.houses.filter(h => h.id !== id), sections: prev.sections.filter(s => s.house_id !== id), places: prev.places.filter(p => !sIds.includes(p.section_id)), items: prev.items.map(i => pIds.includes(i.place_id) ? { ...i, place_id: null } : i) }));
-    logAct("house", `Deleted house "${name}"`);
+    api.logActivity("house", `Deleted house "${name}"`).then(act =>
+      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
     if (view.houseId === id) setView({ page: "dashboard" });
   };
 
-  // ── Sections ───────────────────────────────────────────────────────────────
   const addSection = async (house_id, name) => {
-    const { data, error } = await supabase.from("sections").insert({ house_id, name }).select().single();
-    if (error) { showToast(error.message); return; }
-    setDb(prev => ({ ...prev, sections: [...prev.sections, data] }));
+    const section = await api.addSection(house_id, name);
+    setDb(prev => ({ ...prev, sections: [...prev.sections, section] }));
     const hName = db.houses.find(h => h.id === house_id)?.name;
-    logAct("section", `Added section "${name}" in "${hName}"`);
+    api.logActivity("section", `Added section "${name}" in "${hName}"`).then(act =>
+      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
   };
+
   const delSection = async (id) => {
     const sec = db.sections.find(s => s.id === id);
-    const { error } = await supabase.from("sections").delete().eq("id", id);
-    if (error) { showToast(error.message); return; }
+    await api.deleteSection(id);
     const pIds = db.places.filter(p => p.section_id === id).map(p => p.id);
     setDb(prev => ({ ...prev, sections: prev.sections.filter(s => s.id !== id), places: prev.places.filter(p => p.section_id !== id), items: prev.items.map(i => pIds.includes(i.place_id) ? { ...i, place_id: null } : i) }));
-    logAct("section", `Deleted section "${sec?.name}"`);
+    api.logActivity("section", `Deleted section "${sec?.name}"`).then(act =>
+      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
     if (view.sectionId === id) setView({ page: "house", houseId: sec?.house_id });
   };
 
-  // ── Places ─────────────────────────────────────────────────────────────────
   const addPlace = async (section_id, name) => {
-    const { data, error } = await supabase.from("places").insert({ section_id, name }).select().single();
-    if (error) { showToast(error.message); return; }
-    setDb(prev => ({ ...prev, places: [...prev.places, data] }));
+    const place = await api.addPlace(section_id, name);
+    setDb(prev => ({ ...prev, places: [...prev.places, place] }));
     const sName = db.sections.find(s => s.id === section_id)?.name;
-    logAct("place", `Added place "${name}" in "${sName}"`);
+    api.logActivity("place", `Added place "${name}" in "${sName}"`).then(act =>
+      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
   };
+
   const delPlace = async (id) => {
     const place = db.places.find(p => p.id === id);
-    const { error } = await supabase.from("places").delete().eq("id", id);
-    if (error) { showToast(error.message); return; }
+    await api.deletePlace(id);
     setDb(prev => ({ ...prev, places: prev.places.filter(p => p.id !== id), items: prev.items.map(i => i.place_id === id ? { ...i, place_id: null } : i) }));
-    logAct("place", `Deleted place "${place?.name}"`);
+    api.logActivity("place", `Deleted place "${place?.name}"`).then(act =>
+      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
     if (view.placeId === id) setView({ page: "section", sectionId: place?.section_id, houseId: view.houseId });
   };
 
-  // ── Items ──────────────────────────────────────────────────────────────────
   const addItem = async (name) => {
-    const { data, error } = await supabase.from("items").insert({ name }).select().single();
-    if (error) { showToast(error.message); return; }
-    setDb(prev => ({ ...prev, items: [...prev.items, data] }));
-    logAct("item", `Added item "${name}"`);
+    const item = await api.addItem(name);
+    setDb(prev => ({ ...prev, items: [...prev.items, item] }));
+    api.logActivity("item", `Added item "${name}"`).then(act =>
+      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
   };
+
   const moveItem = async (itemId, place_id) => {
     const item = db.items.find(i => i.id === itemId);
     if (!item) return;
-    const { error } = await supabase.from("items").update({ place_id }).eq("id", itemId);
-    if (error) { showToast(error.message); return; }
+    await api.moveItem(itemId, place_id);
     setDb(prev => ({ ...prev, items: prev.items.map(i => i.id === itemId ? { ...i, place_id } : i) }));
     const fromName = item.place_id ? db.places.find(p => p.id === item.place_id)?.name : null;
     const toName = place_id ? db.places.find(p => p.id === place_id)?.name : "unassigned";
-    logAct("move", fromName ? `Moved "${item.name}" from "${fromName}" to "${toName}"` : `Placed "${item.name}" in "${toName}"`);
+    const desc = fromName ? `Moved "${item.name}" from "${fromName}" to "${toName}"` : `Placed "${item.name}" in "${toName}"`;
+    api.logActivity("move", desc).then(act =>
+      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
   };
+
   const delItem = async (id) => {
     const name = db.items.find(i => i.id === id)?.name;
-    const { error } = await supabase.from("items").delete().eq("id", id);
-    if (error) { showToast(error.message); return; }
+    await api.deleteItem(id);
     setDb(prev => ({ ...prev, items: prev.items.filter(i => i.id !== id) }));
-    logAct("item", `Deleted item "${name}"`);
+    api.logActivity("item", `Deleted item "${name}"`).then(act =>
+      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
   };
-
-  // ── Derived data ───────────────────────────────────────────────────────────
-  const userHouses = db.houses;
-  const userItems  = db.items;
-  const userActs   = db.acts;
-
-  const allUserPlaces = useMemo(() => {
-    return db.places.filter(p => {
-      const s = db.sections.find(s => s.id === p.section_id);
-      return !!s;
-    });
-  }, [db]);
 
   const itemLoc = useCallback((item) => {
     if (!item?.place_id) return "Not placed";
@@ -717,37 +695,36 @@ export default function App() {
     return [house?.name, sec?.name, place?.name].filter(Boolean).join(" › ");
   }, [db]);
 
+  const allUserPlaces = useMemo(() => db.places, [db]);
   const searchResults = useMemo(() => {
     if (!search.trim()) return [];
     const q = search.toLowerCase();
-    return userItems.filter(i => i.name.toLowerCase().includes(q));
-  }, [search, userItems]);
+    return db.items.filter(i => i.name.toLowerCase().includes(q));
+  }, [search, db]);
 
-  const fns = { addHouse, addSection, addPlace, addItem, moveItem };
+  const fns = { addHouse, addSection, addPlace, addItem, moveItem, showToast };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   if (appLoading) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: T.muted, fontFamily: "-apple-system, sans-serif", fontSize: 14 }}>
-      Loading…
-    </div>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: T.muted, fontFamily: "-apple-system, sans-serif", fontSize: 14 }}>Loading…</div>
   );
 
   if (!user) return <AuthPage onLogin={doLogin} onRegister={doRegister} error={authErr} loading={authLoading} />;
 
   const renderView = () => {
     const { page } = view;
-    if (page === "dashboard") return <DashboardView houses={userHouses} db={db} userItems={userItems} userActs={userActs} onOpenHouse={id => setView({ page: "house", houseId: id })} onAddHouse={() => setModal({ type: "add_house" })} onDeleteHouse={delHouse} />;
-    if (page === "house") return <HouseView house={db.houses.find(h => h.id === view.houseId)} db={db} userItems={userItems} onBack={() => setView({ page: "dashboard" })} onOpenSection={id => setView({ page: "section", sectionId: id, houseId: view.houseId })} onAddSection={() => setModal({ type: "add_section", houseId: view.houseId })} onDeleteSection={delSection} />;
-    if (page === "section") return <SectionView view={view} db={db} userItems={userItems} onGoHouse={id => id ? setView({ page: "house", houseId: id }) : setView({ page: "dashboard" })} onOpenPlace={id => setView({ page: "place", placeId: id, sectionId: view.sectionId, houseId: view.houseId })} onAddPlace={() => setModal({ type: "add_place", sectionId: view.sectionId })} onDeletePlace={delPlace} />;
-    if (page === "place") return <PlaceView view={view} db={db} userItems={userItems} onGoHouse={id => id ? setView({ page: "house", houseId: id }) : setView({ page: "dashboard" })} onGoSection={() => setView({ page: "section", sectionId: view.sectionId, houseId: view.houseId })} onMoveItem={iid => setModal({ type: "move_item", itemId: iid, targetPlaceId: view.placeId })} onRemoveItem={iid => moveItem(iid, null)} />;
-    if (page === "items") return <ItemsView userItems={userItems} db={db} itemLoc={itemLoc} onAddItem={() => setModal({ type: "add_item" })} onMoveItem={iid => setModal({ type: "move_item", itemId: iid })} onDeleteItem={delItem} />;
-    if (page === "activity") return <ActivityView acts={userActs} />;
+    if (page === "dashboard") return <DashboardView houses={db.houses} db={db} userItems={db.items} userActs={db.acts} onOpenHouse={id => setView({ page: "house", houseId: id })} onAddHouse={() => setModal({ type: "add_house" })} onDeleteHouse={delHouse} />;
+    if (page === "house")     return <HouseView house={db.houses.find(h => h.id === view.houseId)} db={db} userItems={db.items} onBack={() => setView({ page: "dashboard" })} onOpenSection={id => setView({ page: "section", sectionId: id, houseId: view.houseId })} onAddSection={() => setModal({ type: "add_section", houseId: view.houseId })} onDeleteSection={delSection} />;
+    if (page === "section")   return <SectionView view={view} db={db} userItems={db.items} onGoHouse={id => id ? setView({ page: "house", houseId: id }) : setView({ page: "dashboard" })} onOpenPlace={id => setView({ page: "place", placeId: id, sectionId: view.sectionId, houseId: view.houseId })} onAddPlace={() => setModal({ type: "add_place", sectionId: view.sectionId })} onDeletePlace={delPlace} />;
+    if (page === "place")     return <PlaceView view={view} db={db} userItems={db.items} onGoHouse={id => id ? setView({ page: "house", houseId: id }) : setView({ page: "dashboard" })} onGoSection={() => setView({ page: "section", sectionId: view.sectionId, houseId: view.houseId })} onMoveItem={iid => setModal({ type: "move_item", itemId: iid, targetPlaceId: view.placeId })} onRemoveItem={iid => moveItem(iid, null)} />;
+    if (page === "items")     return <ItemsView userItems={db.items} db={db} itemLoc={itemLoc} onAddItem={() => setModal({ type: "add_item" })} onMoveItem={iid => setModal({ type: "move_item", itemId: iid })} onDeleteItem={delItem} />;
+    if (page === "activity")  return <ActivityView acts={db.acts} />;
   };
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: T.bg, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <Sidebar view={view} setView={setView} user={user} onLogout={doLogout} search={search} setSearch={setSearch} searchResults={searchResults} db={db} itemLoc={itemLoc} />
       <main style={{ flex: 1, padding: "1.75rem 2rem", minWidth: 0, overflowX: "hidden" }}>
+        {dataLoading && <div style={{ fontSize: 12, color: T.muted, marginBottom: 12 }}>Loading…</div>}
         {renderView()}
       </main>
       {modal && <Modal modal={modal} onClose={() => setModal(null)} db={db} allPlaces={allUserPlaces} fns={fns} />}
