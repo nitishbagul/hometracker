@@ -1,5 +1,5 @@
 import { getUser } from './_auth.js'
-import { getDb } from './_db.js'
+import { getDb, canAccessHouse } from './_db.js'
 
 export default async function handler(req, res) {
   const user = await getUser(req)
@@ -9,8 +9,8 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     const { house_id, name } = req.body
-    const [owned] = await sql`SELECT id FROM houses WHERE id = ${house_id} AND user_id = ${user.id}`
-    if (!owned) return res.status(403).json({ error: 'Forbidden' })
+    const access = await canAccessHouse(sql, user.id, house_id)
+    if (!access) return res.status(403).json({ error: 'Forbidden' })
     const [section] = await sql`
       INSERT INTO sections (house_id, name) VALUES (${house_id}, ${name}) RETURNING *`
     return res.json(section)
@@ -18,9 +18,11 @@ export default async function handler(req, res) {
 
   if (req.method === 'DELETE') {
     const { id } = req.body
-    await sql`
-      DELETE FROM sections WHERE id = ${id}
-      AND house_id IN (SELECT id FROM houses WHERE user_id = ${user.id})`
+    const [sec] = await sql`SELECT house_id FROM sections WHERE id = ${id}`
+    if (!sec) return res.status(404).json({ error: 'Not found' })
+    const access = await canAccessHouse(sql, user.id, sec.house_id)
+    if (!access) return res.status(403).json({ error: 'Forbidden' })
+    await sql`DELETE FROM sections WHERE id = ${id}`
     return res.json({ ok: true })
   }
 

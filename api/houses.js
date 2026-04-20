@@ -1,5 +1,5 @@
 import { getUser } from './_auth.js'
-import { getDb } from './_db.js'
+import { getDb, isHouseOwner } from './_db.js'
 
 export default async function handler(req, res) {
   const user = await getUser(req)
@@ -17,7 +17,9 @@ export default async function handler(req, res) {
 
   if (req.method === 'DELETE') {
     const { id } = req.body
-    await sql`DELETE FROM houses WHERE id = ${id} AND user_id = ${user.id}`
+    const owned = await isHouseOwner(sql, user.id, id)
+    if (!owned) return res.status(403).json({ error: 'Only the owner can delete a house' })
+    await sql`DELETE FROM houses WHERE id = ${id}`
     return res.json({ ok: true })
   }
 

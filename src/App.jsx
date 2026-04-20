@@ -2,12 +2,10 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase } from "./lib/supabase";
 import { api } from "./lib/api";
 
-/* ─── HELPERS ────────────────────────────────────────────────────────────── */
 const fmt = iso => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 const displayName = email => email?.split("@")[0] ?? "user";
-const emptyDb = () => ({ houses: [], sections: [], places: [], items: [], acts: [] });
+const emptyDb = () => ({ houses: [], sections: [], places: [], items: [], acts: [], invites: [], members: [] });
 
-/* ─── DESIGN TOKENS ─────────────────────────────────────────────────────── */
 const T = {
   bg: "#FAFAF8", bgCard: "#FFFFFF", bgSidebar: "#F3F2EE", bgHover: "#EEECEA",
   accent: "#4338CA", accentLight: "#EEF2FF", accentText: "#312E81",
@@ -24,9 +22,8 @@ const css = {
   label: { fontSize: 12, fontWeight: 600, color: T.muted, letterSpacing: "0.04em", marginBottom: 5, display: "block", textTransform: "uppercase" },
 };
 
-/* ─── TINY COMPONENTS ───────────────────────────────────────────────────── */
 function Btn({ children, onClick, variant = "ghost", size = "md", full, style = {}, disabled }) {
-  const v = { primary: { background: T.accent, color: "#fff", border: "none", fontWeight: 600 }, ghost: { background: "transparent", color: T.text, border: `1px solid ${T.border}`, fontWeight: 500 }, danger: { background: "transparent", color: T.danger, border: "none", fontWeight: 500 }, subtle: { background: T.bgHover, color: T.text, border: "none", fontWeight: 500 } };
+  const v = { primary: { background: T.accent, color: "#fff", border: "none", fontWeight: 600 }, ghost: { background: "transparent", color: T.text, border: `1px solid ${T.border}`, fontWeight: 500 }, danger: { background: "transparent", color: T.danger, border: "none", fontWeight: 500 }, subtle: { background: T.bgHover, color: T.text, border: "none", fontWeight: 500 }, success: { background: T.successBg, color: T.success, border: "none", fontWeight: 600 } };
   const s = { sm: "5px 10px", md: "8px 16px", lg: "10px 20px" };
   return (
     <button disabled={disabled} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: s[size], borderRadius: T.radiusSm, cursor: disabled ? "default" : "pointer", fontSize: size === "sm" ? 12 : 13, fontFamily: "inherit", transition: "opacity 0.12s", width: full ? "100%" : undefined, opacity: disabled ? 0.5 : 1, ...v[variant], ...style }}
@@ -90,6 +87,38 @@ function Toast({ msg, type = "error" }) {
   );
 }
 
+function Avatar({ email, size = 28 }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: 999, background: T.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: Math.floor(size * 0.4), fontWeight: 700, color: "#fff", flexShrink: 0, title: email }}>
+      {displayName(email)[0].toUpperCase()}
+    </div>
+  );
+}
+
+/* ─── INVITE BANNER ─────────────────────────────────────────────────────── */
+function InviteBanner({ invites, onAccept, onDecline }) {
+  if (!invites.length) return null;
+  return (
+    <div style={{ marginBottom: "1.5rem" }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 10 }}>Pending invites</div>
+      {invites.map(inv => (
+        <div key={inv.id} style={{ ...css.card, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8, borderLeft: `3px solid ${T.accent}` }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 2 }}>
+              You've been invited to <span style={{ color: T.accent }}>{inv.house_name}</span>
+            </div>
+            <div style={{ fontSize: 12, color: T.muted }}>Invited by {inv.inviter_email} · {fmt(inv.created_at)}</div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <Btn variant="success" size="sm" onClick={() => onAccept(inv)}>Accept</Btn>
+            <Btn variant="danger" size="sm" onClick={() => onDecline(inv)}>Decline</Btn>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ─── MODAL ─────────────────────────────────────────────────────────────── */
 function Modal({ modal, onClose, db, allPlaces, fns }) {
   const [val, setVal] = useState("");
@@ -103,26 +132,26 @@ function Modal({ modal, onClose, db, allPlaces, fns }) {
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 50); }, []);
 
   const cfg = {
-    add_house:   { title: "Add house",           ph: "e.g. My home, Weekend cabin" },
-    add_section: { title: "Add room / section",  ph: "e.g. Master bedroom, Kitchen, Garage" },
-    add_place:   { title: "Add storage place",   ph: "e.g. Closet, Top drawer, Shelf B" },
-    add_item:    { title: "Add item",             ph: "e.g. Car spare keys, Old photo album" },
-    move_item:   { title: modal.itemId ? "Place / move item" : "Move item to this place" },
+    add_house:     { title: "Add house",           ph: "e.g. My home, Weekend cabin" },
+    add_section:   { title: "Add room / section",  ph: "e.g. Master bedroom, Kitchen, Garage" },
+    add_place:     { title: "Add storage place",   ph: "e.g. Closet, Top drawer, Shelf B" },
+    add_item:      { title: "Add item",             ph: "e.g. Car spare keys, Old photo album" },
+    move_item:     { title: modal.itemId ? "Place / move item" : "Move item to this place" },
+    invite_member: { title: "Invite someone",       ph: "their@email.com" },
   };
 
   const submit = async () => {
     if (modal.type !== "move_item" && !val.trim()) return;
     setLoading(true);
     try {
-      if (modal.type === "add_house")   await fns.addHouse(val.trim());
+      if (modal.type === "add_house")        await fns.addHouse(val.trim());
       else if (modal.type === "add_section") await fns.addSection(modal.houseId, val.trim());
       else if (modal.type === "add_place")   await fns.addPlace(modal.sectionId, val.trim());
       else if (modal.type === "add_item")    await fns.addItem(val.trim());
       else if (modal.type === "move_item")   await fns.moveItem(modal.itemId || iid, pid || null);
+      else if (modal.type === "invite_member") await fns.sendInvite(modal.houseId, val.trim());
       onClose();
-    } catch (e) {
-      fns.showToast(e.message);
-    }
+    } catch (e) { fns.showToast(e.message); }
     setLoading(false);
   };
 
@@ -157,7 +186,7 @@ function Modal({ modal, onClose, db, allPlaces, fns }) {
             <div>
               <label style={css.label}>Assign to place</label>
               <select ref={modal.itemId ? inputRef : undefined} value={pid} onChange={e => setPid(e.target.value)} style={css.input}>
-                <option value="">— Unassigned (remove from all places) —</option>
+                <option value="">— Unassigned —</option>
                 {allPlaces.map(p => {
                   const sec = db.sections.find(s => s.id === p.section_id);
                   const house = sec ? db.houses.find(h => h.id === sec.house_id) : null;
@@ -165,6 +194,13 @@ function Modal({ modal, onClose, db, allPlaces, fns }) {
                 })}
               </select>
             </div>
+          </div>
+        ) : modal.type === "invite_member" ? (
+          <div>
+            <label style={css.label}>Email address</label>
+            <input ref={inputRef} type="email" style={css.input} value={val} onChange={e => setVal(e.target.value)}
+              placeholder={cfg[modal.type].ph} onKeyDown={e => e.key === "Enter" && submit()} />
+            <p style={{ fontSize: 12, color: T.muted, marginTop: 8 }}>They'll see the invite next time they log in.</p>
           </div>
         ) : (
           <div>
@@ -176,7 +212,7 @@ function Modal({ modal, onClose, db, allPlaces, fns }) {
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: "1.25rem" }}>
           <Btn onClick={onClose} disabled={loading}>Cancel</Btn>
-          <Btn variant="primary" onClick={submit} disabled={loading}>{loading ? "Saving…" : isMove ? "Confirm" : "Add"}</Btn>
+          <Btn variant="primary" onClick={submit} disabled={loading}>{loading ? "Saving…" : isMove ? "Confirm" : modal.type === "invite_member" ? "Send invite" : "Add"}</Btn>
         </div>
       </div>
     </div>
@@ -265,11 +301,13 @@ function Sidebar({ view, setView, user, onLogout, search, setSearch, searchResul
       <nav style={{ padding: "0.25rem 0.5rem", flex: 1 }}>
         {nav.map(n => {
           const active = view.page === n.id;
+          const badge = n.id === "dashboard" && db.invites?.length > 0 ? db.invites.length : null;
           return (
             <button key={n.id} onClick={() => { setView({ page: n.id }); setSearch(""); }}
               style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderRadius: T.radiusSm, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: active ? 600 : 500, background: active ? T.bgCard : "transparent", color: active ? T.accent : T.muted, marginBottom: 2, transition: "all 0.1s", boxShadow: active ? "0 1px 3px rgba(0,0,0,0.07)" : "none" }}>
               <span style={{ fontSize: 15, opacity: active ? 1 : 0.6 }}>{n.icon}</span>
               {n.label}
+              {badge && <span style={{ marginLeft: "auto", background: T.accent, color: "#fff", borderRadius: 99, fontSize: 10, fontWeight: 700, padding: "1px 6px" }}>{badge}</span>}
             </button>
           );
         })}
@@ -277,9 +315,7 @@ function Sidebar({ view, setView, user, onLogout, search, setSearch, searchResul
 
       <div style={{ padding: "0.875rem 1rem", borderTop: `1px solid ${T.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <div style={{ width: 28, height: 28, borderRadius: 999, background: T.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
-            {displayName(user.email)[0].toUpperCase()}
-          </div>
+          <Avatar email={user.email} />
           <span style={{ fontSize: 13, fontWeight: 600, color: T.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName(user.email)}</span>
         </div>
         <Btn onClick={onLogout} full size="sm" style={{ color: T.muted, fontSize: 12 }}>Sign out</Btn>
@@ -289,24 +325,29 @@ function Sidebar({ view, setView, user, onLogout, search, setSearch, searchResul
 }
 
 /* ─── DASHBOARD ─────────────────────────────────────────────────────────── */
-function DashboardView({ houses, db, userItems, userActs, onOpenHouse, onAddHouse, onDeleteHouse }) {
+function DashboardView({ houses, db, user, userItems, userActs, onOpenHouse, onAddHouse, onDeleteHouse, onInvite, onAcceptInvite, onDeclineInvite }) {
   const sectionCount = db.sections.filter(s => houses.some(h => h.id === s.house_id)).length;
   const placeCount = db.places.filter(p => {
     const s = db.sections.find(s => s.id === p.section_id);
     return houses.some(h => h.id === s?.house_id);
   }).length;
+
   return (
     <div>
+      <InviteBanner invites={db.invites || []} onAccept={onAcceptInvite} onDecline={onDeclineInvite} />
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, color: T.text, letterSpacing: "-0.03em" }}>My houses</h1>
         <Btn variant="primary" onClick={onAddHouse}>+ Add house</Btn>
       </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: "1.5rem" }}>
         <StatCard label="Houses" value={houses.length} />
         <StatCard label="Sections" value={sectionCount} />
         <StatCard label="Places" value={placeCount} />
         <StatCard label="Items placed" value={userItems.filter(i => i.place_id).length} color={T.accent} />
       </div>
+
       {houses.length === 0 ? (
         <div style={css.card}>
           <Empty icon="🏠" title="No houses yet" sub="Start by adding your first house — then add rooms, storage spots, and items" action={<Btn variant="primary" onClick={onAddHouse}>+ Add first house</Btn>} />
@@ -317,24 +358,41 @@ function DashboardView({ houses, db, userItems, userActs, onOpenHouse, onAddHous
             const sSecs = db.sections.filter(s => s.house_id === house.id);
             const sPlaces = db.places.filter(p => sSecs.some(s => s.id === p.section_id));
             const hItems = userItems.filter(i => sPlaces.some(p => p.id === i.place_id));
+            const isOwner = house.user_id === user.id;
+            const memberCount = (db.members || []).filter(m => m.house_id === house.id).length;
+
             return (
               <div key={house.id} onClick={() => onOpenHouse(house.id)}
-                style={{ ...css.card, cursor: "pointer", transition: "transform 0.12s, box-shadow 0.12s" }}
+                style={{ ...css.card, cursor: "pointer", transition: "transform 0.12s, box-shadow 0.12s", position: "relative" }}
                 onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.08)"; }}
                 onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = ""; }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div style={{ width: 44, height: 44, borderRadius: 12, background: T.accentLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, marginBottom: 12 }}>🏠</div>
-                  <button onClick={e => { e.stopPropagation(); if (window.confirm(`Delete "${house.name}" and all its contents?`)) onDeleteHouse(house.id); }}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: T.muted, fontSize: 16, padding: "2px 4px", opacity: 0.4 }}
-                    onMouseEnter={e => e.currentTarget.style.opacity = "1"} onMouseLeave={e => e.currentTarget.style.opacity = "0.4"}>×</button>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {isOwner && (
+                      <button onClick={e => { e.stopPropagation(); onInvite(house.id); }}
+                        style={{ background: T.accentLight, border: "none", cursor: "pointer", color: T.accentText, fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 99, fontFamily: "inherit" }}
+                        title="Invite someone">+ Invite</button>
+                    )}
+                    {isOwner && (
+                      <button onClick={e => { e.stopPropagation(); if (window.confirm(`Delete "${house.name}" and all its contents?`)) onDeleteHouse(house.id); }}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: T.muted, fontSize: 16, padding: "2px 4px", opacity: 0.4 }}
+                        onMouseEnter={e => e.currentTarget.style.opacity = "1"} onMouseLeave={e => e.currentTarget.style.opacity = "0.4"}>×</button>
+                    )}
+                  </div>
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 4 }}>{house.name}</div>
-                <div style={{ fontSize: 12, color: T.muted }}>{sSecs.length} sections · {sPlaces.length} places · {hItems.length} items</div>
+                <div style={{ fontSize: 12, color: T.muted, marginBottom: 8 }}>{sSecs.length} sections · {sPlaces.length} places · {hItems.length} items</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {!isOwner && <Tag label="Shared with you" color="accent" />}
+                  {memberCount > 0 && <Tag label={`${memberCount + 1} members`} color="neutral" />}
+                </div>
               </div>
             );
           })}
         </div>
       )}
+
       {userActs.length > 0 && (
         <div>
           <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 10 }}>Recent activity</div>
@@ -356,16 +414,49 @@ function DashboardView({ houses, db, userItems, userActs, onOpenHouse, onAddHous
 }
 
 /* ─── HOUSE VIEW ────────────────────────────────────────────────────────── */
-function HouseView({ house, db, userItems, onBack, onOpenSection, onAddSection, onDeleteSection }) {
+function HouseView({ house, db, user, userItems, onBack, onOpenSection, onAddSection, onDeleteSection, onInvite, onRemoveMember }) {
   if (!house) return null;
   const sections = db.sections.filter(s => s.house_id === house.id);
+  const isOwner = house.user_id === user.id;
+  const members = (db.members || []).filter(m => m.house_id === house.id);
+
   return (
     <div>
       <Crumb items={[{ label: "Houses", onClick: onBack }, { label: house.name }]} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, color: T.text, letterSpacing: "-0.03em" }}>{house.name}</h1>
-        <Btn variant="primary" onClick={onAddSection}>+ Add section</Btn>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 800, margin: "0 0 4px", color: T.text, letterSpacing: "-0.03em" }}>{house.name}</h1>
+          {!isOwner && <Tag label="Shared with you" color="accent" />}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {isOwner && <Btn onClick={onInvite}>+ Invite member</Btn>}
+          <Btn variant="primary" onClick={onAddSection}>+ Add section</Btn>
+        </div>
       </div>
+
+      {members.length > 0 && (
+        <div style={{ ...css.card, marginBottom: "1.25rem" }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 10 }}>Members</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Avatar email={user.email} size={28} />
+              <span style={{ fontSize: 13, color: T.text }}>{displayName(user.email)} {isOwner ? <Tag label="owner" color="accent" /> : ""}</span>
+            </div>
+            {members.map(m => (
+              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Avatar email={m.user_id} size={28} />
+                <span style={{ fontSize: 13, color: T.text }}>{m.user_id.slice(0, 8)}…</span>
+                {isOwner && (
+                  <button onClick={() => { if (window.confirm("Remove this member?")) onRemoveMember(house.id, m.user_id); }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: T.muted, fontSize: 13, padding: "0 2px", fontFamily: "inherit", opacity: 0.5 }}
+                    onMouseEnter={e => e.currentTarget.style.opacity = "1"} onMouseLeave={e => e.currentTarget.style.opacity = "0.5"}>×</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {sections.length === 0 ? (
         <div style={css.card}><Empty icon="🚪" title="No sections yet" sub="Add rooms or areas like Bedroom, Kitchen, Garage" action={<Btn variant="primary" onClick={onAddSection}>+ Add section</Btn>} /></div>
       ) : (
@@ -558,7 +649,6 @@ export default function App() {
   const [modal, setModal] = useState(null);
   const [search, setSearch] = useState("");
   const [appLoading, setAppLoading] = useState(true);
-  const [dataLoading, setDataLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authErr, setAuthErr] = useState("");
   const [toast, setToast] = useState({ msg: "", type: "error" });
@@ -569,14 +659,10 @@ export default function App() {
   };
 
   const loadData = useCallback(async () => {
-    setDataLoading(true);
     try {
       const data = await api.getData();
       setDb(data);
-    } catch (e) {
-      showToast("Failed to load data: " + e.message);
-    }
-    setDataLoading(false);
+    } catch (e) { showToast("Failed to load data: " + e.message); }
   }, []);
 
   useEffect(() => {
@@ -605,68 +691,53 @@ export default function App() {
   };
   const doLogout = () => supabase.auth.signOut();
 
-  // ── CRUD handlers ──────────────────────────────────────────────────────────
+  const logAct = (type, desc) => api.logActivity(type, desc).then(act =>
+    setDb(prev => ({ ...prev, acts: [act, ...prev.acts].slice(0, 300) }))).catch(() => {});
 
   const addHouse = async (name) => {
     const house = await api.addHouse(name);
     setDb(prev => ({ ...prev, houses: [...prev.houses, house] }));
-    api.logActivity("house", `Created house "${name}"`).then(act =>
-      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
+    logAct("house", `Created house "${name}"`);
   };
-
   const delHouse = async (id) => {
     const name = db.houses.find(h => h.id === id)?.name;
     await api.deleteHouse(id);
     const sIds = db.sections.filter(s => s.house_id === id).map(s => s.id);
     const pIds = db.places.filter(p => sIds.includes(p.section_id)).map(p => p.id);
     setDb(prev => ({ ...prev, houses: prev.houses.filter(h => h.id !== id), sections: prev.sections.filter(s => s.house_id !== id), places: prev.places.filter(p => !sIds.includes(p.section_id)), items: prev.items.map(i => pIds.includes(i.place_id) ? { ...i, place_id: null } : i) }));
-    api.logActivity("house", `Deleted house "${name}"`).then(act =>
-      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
     if (view.houseId === id) setView({ page: "dashboard" });
+    logAct("house", `Deleted house "${name}"`);
   };
-
   const addSection = async (house_id, name) => {
     const section = await api.addSection(house_id, name);
     setDb(prev => ({ ...prev, sections: [...prev.sections, section] }));
-    const hName = db.houses.find(h => h.id === house_id)?.name;
-    api.logActivity("section", `Added section "${name}" in "${hName}"`).then(act =>
-      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
+    logAct("section", `Added section "${name}"`);
   };
-
   const delSection = async (id) => {
     const sec = db.sections.find(s => s.id === id);
     await api.deleteSection(id);
     const pIds = db.places.filter(p => p.section_id === id).map(p => p.id);
     setDb(prev => ({ ...prev, sections: prev.sections.filter(s => s.id !== id), places: prev.places.filter(p => p.section_id !== id), items: prev.items.map(i => pIds.includes(i.place_id) ? { ...i, place_id: null } : i) }));
-    api.logActivity("section", `Deleted section "${sec?.name}"`).then(act =>
-      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
     if (view.sectionId === id) setView({ page: "house", houseId: sec?.house_id });
+    logAct("section", `Deleted section "${sec?.name}"`);
   };
-
   const addPlace = async (section_id, name) => {
     const place = await api.addPlace(section_id, name);
     setDb(prev => ({ ...prev, places: [...prev.places, place] }));
-    const sName = db.sections.find(s => s.id === section_id)?.name;
-    api.logActivity("place", `Added place "${name}" in "${sName}"`).then(act =>
-      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
+    logAct("place", `Added place "${name}"`);
   };
-
   const delPlace = async (id) => {
     const place = db.places.find(p => p.id === id);
     await api.deletePlace(id);
     setDb(prev => ({ ...prev, places: prev.places.filter(p => p.id !== id), items: prev.items.map(i => i.place_id === id ? { ...i, place_id: null } : i) }));
-    api.logActivity("place", `Deleted place "${place?.name}"`).then(act =>
-      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
     if (view.placeId === id) setView({ page: "section", sectionId: place?.section_id, houseId: view.houseId });
+    logAct("place", `Deleted place "${place?.name}"`);
   };
-
   const addItem = async (name) => {
     const item = await api.addItem(name);
     setDb(prev => ({ ...prev, items: [...prev.items, item] }));
-    api.logActivity("item", `Added item "${name}"`).then(act =>
-      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
+    logAct("item", `Added item "${name}"`);
   };
-
   const moveItem = async (itemId, place_id) => {
     const item = db.items.find(i => i.id === itemId);
     if (!item) return;
@@ -674,17 +745,37 @@ export default function App() {
     setDb(prev => ({ ...prev, items: prev.items.map(i => i.id === itemId ? { ...i, place_id } : i) }));
     const fromName = item.place_id ? db.places.find(p => p.id === item.place_id)?.name : null;
     const toName = place_id ? db.places.find(p => p.id === place_id)?.name : "unassigned";
-    const desc = fromName ? `Moved "${item.name}" from "${fromName}" to "${toName}"` : `Placed "${item.name}" in "${toName}"`;
-    api.logActivity("move", desc).then(act =>
-      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
+    logAct("move", fromName ? `Moved "${item.name}" from "${fromName}" to "${toName}"` : `Placed "${item.name}" in "${toName}"`);
   };
-
   const delItem = async (id) => {
     const name = db.items.find(i => i.id === id)?.name;
     await api.deleteItem(id);
     setDb(prev => ({ ...prev, items: prev.items.filter(i => i.id !== id) }));
-    api.logActivity("item", `Deleted item "${name}"`).then(act =>
-      setDb(prev => ({ ...prev, acts: [act, ...prev.acts] })));
+    logAct("item", `Deleted item "${name}"`);
+  };
+
+  const sendInvite = async (house_id, invited_email) => {
+    await api.sendInvite(house_id, invited_email);
+    showToast(`Invite sent to ${invited_email}`, "success");
+    logAct("invite", `Invited ${invited_email} to join a house`);
+  };
+
+  const acceptInvite = async (inv) => {
+    await api.respondInvite(inv.id, "accepted");
+    setDb(prev => ({ ...prev, invites: prev.invites.filter(i => i.id !== inv.id) }));
+    showToast(`You joined "${inv.house_name}"!`, "success");
+    loadData();
+  };
+
+  const declineInvite = async (inv) => {
+    await api.respondInvite(inv.id, "declined");
+    setDb(prev => ({ ...prev, invites: prev.invites.filter(i => i.id !== inv.id) }));
+  };
+
+  const removeMember = async (house_id, member_user_id) => {
+    await api.removeMember(house_id, member_user_id);
+    setDb(prev => ({ ...prev, members: prev.members.filter(m => !(m.house_id === house_id && m.user_id === member_user_id)) }));
+    showToast("Member removed", "success");
   };
 
   const itemLoc = useCallback((item) => {
@@ -695,25 +786,23 @@ export default function App() {
     return [house?.name, sec?.name, place?.name].filter(Boolean).join(" › ");
   }, [db]);
 
-  const allUserPlaces = useMemo(() => db.places, [db]);
   const searchResults = useMemo(() => {
     if (!search.trim()) return [];
     const q = search.toLowerCase();
     return db.items.filter(i => i.name.toLowerCase().includes(q));
   }, [search, db]);
 
-  const fns = { addHouse, addSection, addPlace, addItem, moveItem, showToast };
+  const fns = { addHouse, addSection, addPlace, addItem, moveItem, sendInvite, showToast };
 
   if (appLoading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: T.muted, fontFamily: "-apple-system, sans-serif", fontSize: 14 }}>Loading…</div>
   );
-
   if (!user) return <AuthPage onLogin={doLogin} onRegister={doRegister} error={authErr} loading={authLoading} />;
 
   const renderView = () => {
     const { page } = view;
-    if (page === "dashboard") return <DashboardView houses={db.houses} db={db} userItems={db.items} userActs={db.acts} onOpenHouse={id => setView({ page: "house", houseId: id })} onAddHouse={() => setModal({ type: "add_house" })} onDeleteHouse={delHouse} />;
-    if (page === "house")     return <HouseView house={db.houses.find(h => h.id === view.houseId)} db={db} userItems={db.items} onBack={() => setView({ page: "dashboard" })} onOpenSection={id => setView({ page: "section", sectionId: id, houseId: view.houseId })} onAddSection={() => setModal({ type: "add_section", houseId: view.houseId })} onDeleteSection={delSection} />;
+    if (page === "dashboard") return <DashboardView houses={db.houses} db={db} user={user} userItems={db.items} userActs={db.acts} onOpenHouse={id => setView({ page: "house", houseId: id })} onAddHouse={() => setModal({ type: "add_house" })} onDeleteHouse={delHouse} onInvite={hid => setModal({ type: "invite_member", houseId: hid })} onAcceptInvite={acceptInvite} onDeclineInvite={declineInvite} />;
+    if (page === "house")     return <HouseView house={db.houses.find(h => h.id === view.houseId)} db={db} user={user} userItems={db.items} onBack={() => setView({ page: "dashboard" })} onOpenSection={id => setView({ page: "section", sectionId: id, houseId: view.houseId })} onAddSection={() => setModal({ type: "add_section", houseId: view.houseId })} onDeleteSection={delSection} onInvite={() => setModal({ type: "invite_member", houseId: view.houseId })} onRemoveMember={removeMember} />;
     if (page === "section")   return <SectionView view={view} db={db} userItems={db.items} onGoHouse={id => id ? setView({ page: "house", houseId: id }) : setView({ page: "dashboard" })} onOpenPlace={id => setView({ page: "place", placeId: id, sectionId: view.sectionId, houseId: view.houseId })} onAddPlace={() => setModal({ type: "add_place", sectionId: view.sectionId })} onDeletePlace={delPlace} />;
     if (page === "place")     return <PlaceView view={view} db={db} userItems={db.items} onGoHouse={id => id ? setView({ page: "house", houseId: id }) : setView({ page: "dashboard" })} onGoSection={() => setView({ page: "section", sectionId: view.sectionId, houseId: view.houseId })} onMoveItem={iid => setModal({ type: "move_item", itemId: iid, targetPlaceId: view.placeId })} onRemoveItem={iid => moveItem(iid, null)} />;
     if (page === "items")     return <ItemsView userItems={db.items} db={db} itemLoc={itemLoc} onAddItem={() => setModal({ type: "add_item" })} onMoveItem={iid => setModal({ type: "move_item", itemId: iid })} onDeleteItem={delItem} />;
@@ -724,10 +813,9 @@ export default function App() {
     <div style={{ display: "flex", minHeight: "100vh", background: T.bg, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <Sidebar view={view} setView={setView} user={user} onLogout={doLogout} search={search} setSearch={setSearch} searchResults={searchResults} db={db} itemLoc={itemLoc} />
       <main style={{ flex: 1, padding: "1.75rem 2rem", minWidth: 0, overflowX: "hidden" }}>
-        {dataLoading && <div style={{ fontSize: 12, color: T.muted, marginBottom: 12 }}>Loading…</div>}
         {renderView()}
       </main>
-      {modal && <Modal modal={modal} onClose={() => setModal(null)} db={db} allPlaces={allUserPlaces} fns={fns} />}
+      {modal && <Modal modal={modal} onClose={() => setModal(null)} db={db} allPlaces={db.places} fns={fns} />}
       <Toast msg={toast.msg} type={toast.type} />
     </div>
   );
