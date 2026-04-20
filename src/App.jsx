@@ -220,11 +220,25 @@ function Modal({ modal, onClose, db, allPlaces, fns }) {
 }
 
 /* ─── AUTH ──────────────────────────────────────────────────────────────── */
-function AuthPage({ onLogin, onRegister, error, loading }) {
+function AuthPage({ onLogin, onRegister, onForgotPassword, error, loading }) {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const submit = () => mode === "login" ? onLogin(email, password) : onRegister(email, password);
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+
+  const submit = () => {
+    if (mode === "login") onLogin(email, password);
+    else if (mode === "register") onRegister(email, password);
+  };
+
+  const submitForgot = async () => {
+    if (!email) return;
+    setForgotLoading(true);
+    await onForgotPassword(email);
+    setForgotSent(true);
+    setForgotLoading(false);
+  };
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: T.bg, fontFamily: "inherit", padding: "1rem" }}>
@@ -235,26 +249,122 @@ function AuthPage({ onLogin, onRegister, error, loading }) {
           <p style={{ fontSize: 14, color: T.muted, margin: 0 }}>Never lose track of where things are kept</p>
         </div>
         <div style={{ ...css.card, padding: "1.75rem", boxShadow: "0 4px 24px rgba(0,0,0,0.07)" }}>
-          <div style={{ display: "flex", background: T.bg, borderRadius: T.radiusSm, padding: 3, marginBottom: "1.25rem" }}>
-            {["login", "register"].map(m => (
-              <button key={m} onClick={() => setMode(m)}
-                style={{ flex: 1, padding: "7px", borderRadius: "5px", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 600, background: mode === m ? T.bgCard : "transparent", color: mode === m ? T.text : T.muted, boxShadow: mode === m ? "0 1px 4px rgba(0,0,0,0.08)" : "none", transition: "all 0.15s" }}>
-                {m === "login" ? "Sign in" : "Register"}
-              </button>
-            ))}
-          </div>
-          <div style={{ marginBottom: 12 }}>
-            <label style={css.label}>Email</label>
-            <input style={css.input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" autoFocus />
-          </div>
-          <div style={{ marginBottom: error ? 10 : 18 }}>
-            <label style={css.label}>Password</label>
-            <input type="password" style={css.input} value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter your password" onKeyDown={e => e.key === "Enter" && submit()} />
-          </div>
-          {error && <p style={{ fontSize: 13, color: T.danger, background: T.dangerBg, padding: "8px 12px", borderRadius: T.radiusSm, margin: "0 0 14px" }}>{error}</p>}
-          <Btn variant="primary" onClick={submit} full size="lg" disabled={loading}>
-            {loading ? "Please wait…" : mode === "login" ? "Sign in →" : "Create account →"}
-          </Btn>
+          {mode === "forgot" ? (
+            forgotSent ? (
+              <div style={{ textAlign: "center", padding: "0.5rem 0" }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>📬</div>
+                <p style={{ fontSize: 15, fontWeight: 600, color: T.text, margin: "0 0 6px" }}>Check your email</p>
+                <p style={{ fontSize: 13, color: T.muted, margin: "0 0 20px" }}>We sent a password reset link to <strong>{email}</strong></p>
+                <button onClick={() => { setMode("login"); setForgotSent(false); setEmail(""); }}
+                  style={{ fontSize: 13, color: T.accent, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+                  Back to sign in
+                </button>
+              </div>
+            ) : (
+              <>
+                <p style={{ fontSize: 14, color: T.muted, margin: "0 0 16px" }}>Enter your email and we'll send you a reset link.</p>
+                <div style={{ marginBottom: 18 }}>
+                  <label style={css.label}>Email</label>
+                  <input style={css.input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" autoFocus onKeyDown={e => e.key === "Enter" && submitForgot()} />
+                </div>
+                <Btn variant="primary" onClick={submitForgot} full size="lg" disabled={forgotLoading || !email}>
+                  {forgotLoading ? "Sending…" : "Send reset link →"}
+                </Btn>
+                <div style={{ textAlign: "center", marginTop: 14 }}>
+                  <button onClick={() => setMode("login")}
+                    style={{ fontSize: 13, color: T.muted, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+                    Back to sign in
+                  </button>
+                </div>
+              </>
+            )
+          ) : (
+            <>
+              <div style={{ display: "flex", background: T.bg, borderRadius: T.radiusSm, padding: 3, marginBottom: "1.25rem" }}>
+                {["login", "register"].map(m => (
+                  <button key={m} onClick={() => setMode(m)}
+                    style={{ flex: 1, padding: "7px", borderRadius: "5px", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 600, background: mode === m ? T.bgCard : "transparent", color: mode === m ? T.text : T.muted, boxShadow: mode === m ? "0 1px 4px rgba(0,0,0,0.08)" : "none", transition: "all 0.15s" }}>
+                    {m === "login" ? "Sign in" : "Register"}
+                  </button>
+                ))}
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={css.label}>Email</label>
+                <input style={css.input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" autoFocus />
+              </div>
+              <div style={{ marginBottom: 4 }}>
+                <label style={css.label}>Password</label>
+                <input type="password" style={css.input} value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter your password" onKeyDown={e => e.key === "Enter" && submit()} />
+              </div>
+              {mode === "login" && (
+                <div style={{ textAlign: "right", marginBottom: error ? 10 : 18 }}>
+                  <button onClick={() => { setMode("forgot"); setPassword(""); }}
+                    style={{ fontSize: 12, color: T.muted, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}>
+                    Forgot password?
+                  </button>
+                </div>
+              )}
+              {mode === "register" && <div style={{ marginBottom: error ? 10 : 18 }} />}
+              {error && <p style={{ fontSize: 13, color: T.danger, background: T.dangerBg, padding: "8px 12px", borderRadius: T.radiusSm, margin: "0 0 14px" }}>{error}</p>}
+              <Btn variant="primary" onClick={submit} full size="lg" disabled={loading}>
+                {loading ? "Please wait…" : mode === "login" ? "Sign in →" : "Create account →"}
+              </Btn>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── RESET PASSWORD ─────────────────────────────────────────────────────── */
+function ResetPasswordPage({ onReset }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async () => {
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (password !== confirm) { setError("Passwords don't match."); return; }
+    setLoading(true); setError("");
+    const err = await onReset(password);
+    if (err) { setError(err); setLoading(false); }
+    else setDone(true);
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: T.bg, fontFamily: "inherit", padding: "1rem" }}>
+      <div style={{ width: 380 }}>
+        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+          <div style={{ width: 52, height: 52, background: T.accent, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontSize: 24 }}>🏠</div>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: T.text, margin: "0 0 6px", letterSpacing: "-0.03em" }}>HomeTracker</h1>
+        </div>
+        <div style={{ ...css.card, padding: "1.75rem", boxShadow: "0 4px 24px rgba(0,0,0,0.07)" }}>
+          {done ? (
+            <div style={{ textAlign: "center", padding: "0.5rem 0" }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
+              <p style={{ fontSize: 15, fontWeight: 600, color: T.text, margin: "0 0 6px" }}>Password updated</p>
+              <p style={{ fontSize: 13, color: T.muted, margin: "0 0 20px" }}>You're now signed in with your new password.</p>
+            </div>
+          ) : (
+            <>
+              <p style={{ fontSize: 14, fontWeight: 600, color: T.text, margin: "0 0 16px" }}>Set a new password</p>
+              <div style={{ marginBottom: 12 }}>
+                <label style={css.label}>New password</label>
+                <input type="password" style={css.input} value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" autoFocus />
+              </div>
+              <div style={{ marginBottom: error ? 10 : 18 }}>
+                <label style={css.label}>Confirm password</label>
+                <input type="password" style={css.input} value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Repeat your password" onKeyDown={e => e.key === "Enter" && submit()} />
+              </div>
+              {error && <p style={{ fontSize: 13, color: T.danger, background: T.dangerBg, padding: "8px 12px", borderRadius: T.radiusSm, margin: "0 0 14px" }}>{error}</p>}
+              <Btn variant="primary" onClick={submit} full size="lg" disabled={loading}>
+                {loading ? "Updating…" : "Update password →"}
+              </Btn>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -651,6 +761,7 @@ export default function App() {
   const [appLoading, setAppLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
   const [authErr, setAuthErr] = useState("");
+  const [resetMode, setResetMode] = useState(false);
   const [toast, setToast] = useState({ msg: "", type: "error" });
 
   const showToast = (msg, type = "error") => {
@@ -671,8 +782,9 @@ export default function App() {
       setAppLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session) { setUser(session.user); loadData(); }
-      if (event === "SIGNED_OUT") { setUser(null); setDb(emptyDb()); setView({ page: "dashboard" }); }
+      if (event === "PASSWORD_RECOVERY") { setUser(session.user); setResetMode(true); }
+      else if (event === "SIGNED_IN" && session) { setUser(session.user); loadData(); }
+      if (event === "SIGNED_OUT") { setUser(null); setDb(emptyDb()); setView({ page: "dashboard" }); setResetMode(false); }
     });
     return () => subscription.unsubscribe();
   }, [loadData]);
@@ -690,6 +802,16 @@ export default function App() {
     setAuthLoading(false);
   };
   const doLogout = () => supabase.auth.signOut();
+  const doForgotPassword = async (email) => {
+    await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+  };
+  const doResetPassword = async (password) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return error.message;
+    setResetMode(false);
+    loadData();
+    return null;
+  };
 
   const logAct = (type, desc) => api.logActivity(type, desc).then(act =>
     setDb(prev => ({ ...prev, acts: [act, ...prev.acts].slice(0, 300) }))).catch(() => {});
@@ -797,7 +919,8 @@ export default function App() {
   if (appLoading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: T.muted, fontFamily: "-apple-system, sans-serif", fontSize: 14 }}>Loading…</div>
   );
-  if (!user) return <AuthPage onLogin={doLogin} onRegister={doRegister} error={authErr} loading={authLoading} />;
+  if (!user) return <AuthPage onLogin={doLogin} onRegister={doRegister} onForgotPassword={doForgotPassword} error={authErr} loading={authLoading} />;
+  if (resetMode) return <ResetPasswordPage onReset={doResetPassword} />;
 
   const renderView = () => {
     const { page } = view;
