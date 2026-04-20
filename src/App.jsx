@@ -81,7 +81,7 @@ function Toast({ msg, type = "error" }) {
   const bg = type === "error" ? T.dangerBg : T.successBg;
   const fg = type === "error" ? T.danger : T.success;
   return (
-    <div style={{ position: "fixed", bottom: 24, right: 24, background: bg, color: fg, border: `1px solid ${fg}30`, borderRadius: T.radius, padding: "10px 16px", fontSize: 13, fontWeight: 500, zIndex: 999, boxShadow: "0 4px 20px rgba(0,0,0,0.1)", maxWidth: 320 }}>
+    <div style={{ position: "fixed", bottom: 24, right: 16, left: 16, maxWidth: 320, marginLeft: "auto", background: bg, color: fg, border: `1px solid ${fg}30`, borderRadius: T.radius, padding: "10px 16px", fontSize: 13, fontWeight: 500, zIndex: 999, boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
       {msg}
     </div>
   );
@@ -102,7 +102,7 @@ function InviteBanner({ invites, onAccept, onDecline }) {
     <div style={{ marginBottom: "1.5rem" }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 10 }}>Pending invites</div>
       {invites.map(inv => (
-        <div key={inv.id} style={{ ...css.card, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8, borderLeft: `3px solid ${T.accent}` }}>
+        <div key={inv.id} className="invite-row" style={{ ...css.card, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8, borderLeft: `3px solid ${T.accent}` }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 2 }}>
               You've been invited to <span style={{ color: T.accent }}>{inv.house_name}</span>
@@ -160,7 +160,7 @@ function Modal({ modal, onClose, db, allPlaces, fns }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, backdropFilter: "blur(2px)" }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ ...css.card, width: 420, padding: "1.75rem", boxShadow: "0 20px 60px rgba(0,0,0,0.12)", margin: "1rem" }}>
+      <div className="modal-box" style={{ ...css.card, maxWidth: 420, width: "100%", padding: "1.75rem", boxShadow: "0 20px 60px rgba(0,0,0,0.12)", margin: "1rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
           <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>{cfg[modal.type].title}</span>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: T.muted, padding: "0 4px", fontFamily: "inherit" }}>×</button>
@@ -242,7 +242,7 @@ function AuthPage({ onLogin, onRegister, onForgotPassword, error, loading }) {
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: T.bg, fontFamily: "inherit", padding: "1rem" }}>
-      <div style={{ width: 380 }}>
+      <div style={{ width: "100%", maxWidth: 380 }}>
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
           <div style={{ width: 52, height: 52, background: T.accent, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontSize: 24 }}>🏠</div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: T.text, margin: "0 0 6px", letterSpacing: "-0.03em" }}>HomeTracker</h1>
@@ -336,7 +336,7 @@ function ResetPasswordPage({ onReset }) {
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: T.bg, fontFamily: "inherit", padding: "1rem" }}>
-      <div style={{ width: 380 }}>
+      <div style={{ width: "100%", maxWidth: 380 }}>
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
           <div style={{ width: 52, height: 52, background: T.accent, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontSize: 24 }}>🏠</div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: T.text, margin: "0 0 6px", letterSpacing: "-0.03em" }}>HomeTracker</h1>
@@ -372,14 +372,14 @@ function ResetPasswordPage({ onReset }) {
 }
 
 /* ─── SIDEBAR ───────────────────────────────────────────────────────────── */
-function Sidebar({ view, setView, user, onLogout, search, setSearch, searchResults, db, itemLoc }) {
+function Sidebar({ view, setView, user, onLogout, search, setSearch, searchResults, db, itemLoc, className, onClose }) {
   const nav = [
     { id: "dashboard", icon: "⌂", label: "Houses" },
     { id: "items",     icon: "◫", label: "All items" },
     { id: "activity",  icon: "◷", label: "Activity" },
   ];
   return (
-    <div style={{ width: 228, background: T.bgSidebar, borderRight: `1px solid ${T.border}`, display: "flex", flexDirection: "column", minHeight: "100vh", flexShrink: 0 }}>
+    <div className={className || "sidebar"} style={{ width: 228, background: T.bgSidebar, borderRight: `1px solid ${T.border}`, display: "flex", flexDirection: "column", minHeight: "100vh", flexShrink: 0 }}>
       <div style={{ padding: "1.125rem 1rem 0.75rem", borderBottom: `1px solid ${T.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 30, height: 30, background: T.accent, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>🏠</div>
@@ -413,7 +413,7 @@ function Sidebar({ view, setView, user, onLogout, search, setSearch, searchResul
           const active = view.page === n.id;
           const badge = n.id === "dashboard" && db.invites?.length > 0 ? db.invites.length : null;
           return (
-            <button key={n.id} onClick={() => { setView({ page: n.id }); setSearch(""); }}
+            <button key={n.id} onClick={() => { setView({ page: n.id }); setSearch(""); onClose?.(); }}
               style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderRadius: T.radiusSm, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: active ? 600 : 500, background: active ? T.bgCard : "transparent", color: active ? T.accent : T.muted, marginBottom: 2, transition: "all 0.1s", boxShadow: active ? "0 1px 3px rgba(0,0,0,0.07)" : "none" }}>
               <span style={{ fontSize: 15, opacity: active ? 1 : 0.6 }}>{n.icon}</span>
               {n.label}
@@ -446,12 +446,12 @@ function DashboardView({ houses, db, user, userItems, userActs, onOpenHouse, onA
     <div>
       <InviteBanner invites={db.invites || []} onAccept={onAcceptInvite} onDecline={onDeclineInvite} />
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
+      <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, color: T.text, letterSpacing: "-0.03em" }}>My houses</h1>
         <Btn variant="primary" onClick={onAddHouse}>+ Add house</Btn>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: "1.5rem" }}>
+      <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: "1.5rem" }}>
         <StatCard label="Houses" value={houses.length} />
         <StatCard label="Sections" value={sectionCount} />
         <StatCard label="Places" value={placeCount} />
@@ -533,7 +533,7 @@ function HouseView({ house, db, user, userItems, onBack, onOpenSection, onAddSec
   return (
     <div>
       <Crumb items={[{ label: "Houses", onClick: onBack }, { label: house.name }]} />
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
+      <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 800, margin: "0 0 4px", color: T.text, letterSpacing: "-0.03em" }}>{house.name}</h1>
           {!isOwner && <Tag label="Shared with you" color="accent" />}
@@ -608,7 +608,7 @@ function SectionView({ view, db, userItems, onGoHouse, onOpenPlace, onAddPlace, 
   return (
     <div>
       <Crumb items={[{ label: "Houses", onClick: () => onGoHouse(null) }, { label: house?.name, onClick: () => onGoHouse(house?.id) }, { label: section.name }]} />
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
+      <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, color: T.text, letterSpacing: "-0.03em" }}>{section.name}</h1>
         <Btn variant="primary" onClick={onAddPlace}>+ Add place</Btn>
       </div>
@@ -667,7 +667,7 @@ function PlaceView({ view, db, userItems, onGoHouse, onGoSection, onMoveItem, on
                 <div style={{ width: 8, height: 8, borderRadius: 999, background: T.accent, flexShrink: 0 }} />
                 <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{item.name}</span>
               </div>
-              <div style={{ display: "flex", gap: 4 }}>
+              <div className="item-actions" style={{ display: "flex", gap: 4 }}>
                 <Btn size="sm" onClick={() => onMoveItem(item.id)}>Move</Btn>
                 <Btn size="sm" variant="danger" onClick={() => onRemoveItem(item.id)}>Remove</Btn>
               </div>
@@ -684,7 +684,7 @@ function ItemsView({ userItems, db, itemLoc, onAddItem, onMoveItem, onDeleteItem
   const filtered = filter === "placed" ? userItems.filter(i => i.place_id) : filter === "unplaced" ? userItems.filter(i => !i.place_id) : userItems;
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+      <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, color: T.text, letterSpacing: "-0.03em" }}>All items</h1>
         <Btn variant="primary" onClick={onAddItem}>+ Add item</Btn>
       </div>
@@ -714,7 +714,7 @@ function ItemsView({ userItems, db, itemLoc, onAddItem, onMoveItem, onDeleteItem
                     <span style={{ fontSize: 12, color: placed ? T.muted : T.danger }}>{loc}</span>
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 6 }}>
+                <div className="item-actions" style={{ display: "flex", gap: 6 }}>
                   <Btn size="sm" onClick={() => onMoveItem(item.id)}>Place / Move</Btn>
                   <Btn size="sm" variant="danger" onClick={() => { if (window.confirm(`Delete "${item.name}"?`)) onDeleteItem(item.id); }}>Delete</Btn>
                 </div>
@@ -763,6 +763,7 @@ export default function App() {
   const [authErr, setAuthErr] = useState("");
   const [resetMode, setResetMode] = useState(false);
   const [toast, setToast] = useState({ msg: "", type: "error" });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const showToast = (msg, type = "error") => {
     setToast({ msg, type });
@@ -933,11 +934,21 @@ export default function App() {
   };
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: T.bg, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
-      <Sidebar view={view} setView={setView} user={user} onLogout={doLogout} search={search} setSearch={setSearch} searchResults={searchResults} db={db} itemLoc={itemLoc} />
-      <main style={{ flex: 1, padding: "1.75rem 2rem", minWidth: 0, overflowX: "hidden" }}>
-        {renderView()}
-      </main>
+    <div className="app-shell" style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: T.bg, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+      <div className="mobile-header">
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ width: 28, height: 28, background: T.accent, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>🏠</div>
+          <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>HomeTracker</span>
+        </div>
+        <button onClick={() => setSidebarOpen(o => !o)} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 6px", fontSize: 22, color: T.text, lineHeight: 1 }}>☰</button>
+      </div>
+      <div style={{ display: "flex", flex: 1 }}>
+        {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+        <Sidebar className={sidebarOpen ? "sidebar open" : "sidebar"} view={view} setView={setView} user={user} onLogout={doLogout} search={search} setSearch={setSearch} searchResults={searchResults} db={db} itemLoc={itemLoc} onClose={() => setSidebarOpen(false)} />
+        <main className="main-pad" style={{ flex: 1, padding: "1.75rem 2rem", minWidth: 0, overflowX: "hidden" }}>
+          {renderView()}
+        </main>
+      </div>
       {modal && <Modal modal={modal} onClose={() => setModal(null)} db={db} allPlaces={db.places} fns={fns} />}
       <Toast msg={toast.msg} type={toast.type} />
     </div>
