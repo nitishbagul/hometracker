@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useUser, SignInButton, SignUpButton, UserButton } from "@clerk/react";
+import { useUser, SignInButton, SignUpButton, UserButton } from "@clerk/clerk-react";
 import { api } from "./lib/api";
 
 const fmt = iso => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
