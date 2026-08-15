@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { supabase } from "./lib/supabase";
+import { useUser, SignInButton, SignUpButton, UserButton } from "@clerk/react";
 import { api } from "./lib/api";
 
 const fmt = iso => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -220,151 +220,20 @@ function Modal({ modal, onClose, db, allPlaces, fns }) {
 }
 
 /* ─── AUTH ──────────────────────────────────────────────────────────────── */
-function AuthPage({ onLogin, onRegister, onForgotPassword, error, loading }) {
-  const [mode, setMode] = useState("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [forgotSent, setForgotSent] = useState(false);
-  const [forgotLoading, setForgotLoading] = useState(false);
-
-  const submit = () => {
-    if (mode === "login") onLogin(email, password);
-    else if (mode === "register") onRegister(email, password);
-  };
-
-  const submitForgot = async () => {
-    if (!email) return;
-    setForgotLoading(true);
-    await onForgotPassword(email);
-    setForgotSent(true);
-    setForgotLoading(false);
-  };
-
+function AuthPage() {
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: T.bg, fontFamily: "inherit", padding: "1rem" }}>
-      <div style={{ width: "100%", maxWidth: 380 }}>
-        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <div style={{ width: 52, height: 52, background: T.accent, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontSize: 24 }}>🏠</div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: T.text, margin: "0 0 6px", letterSpacing: "-0.03em" }}>HomeTracker</h1>
-          <p style={{ fontSize: 14, color: T.muted, margin: 0 }}>Never lose track of where things are kept</p>
-        </div>
-        <div style={{ ...css.card, padding: "1.75rem", boxShadow: "0 4px 24px rgba(0,0,0,0.07)" }}>
-          {mode === "forgot" ? (
-            forgotSent ? (
-              <div style={{ textAlign: "center", padding: "0.5rem 0" }}>
-                <div style={{ fontSize: 32, marginBottom: 12 }}>📬</div>
-                <p style={{ fontSize: 15, fontWeight: 600, color: T.text, margin: "0 0 6px" }}>Check your email</p>
-                <p style={{ fontSize: 13, color: T.muted, margin: "0 0 20px" }}>We sent a password reset link to <strong>{email}</strong></p>
-                <button onClick={() => { setMode("login"); setForgotSent(false); setEmail(""); }}
-                  style={{ fontSize: 13, color: T.accent, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
-                  Back to sign in
-                </button>
-              </div>
-            ) : (
-              <>
-                <p style={{ fontSize: 14, color: T.muted, margin: "0 0 16px" }}>Enter your email and we'll send you a reset link.</p>
-                <div style={{ marginBottom: 18 }}>
-                  <label style={css.label}>Email</label>
-                  <input style={css.input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" autoFocus onKeyDown={e => e.key === "Enter" && submitForgot()} />
-                </div>
-                <Btn variant="primary" onClick={submitForgot} full size="lg" disabled={forgotLoading || !email}>
-                  {forgotLoading ? "Sending…" : "Send reset link →"}
-                </Btn>
-                <div style={{ textAlign: "center", marginTop: 14 }}>
-                  <button onClick={() => setMode("login")}
-                    style={{ fontSize: 13, color: T.muted, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
-                    Back to sign in
-                  </button>
-                </div>
-              </>
-            )
-          ) : (
-            <>
-              <div style={{ display: "flex", background: T.bg, borderRadius: T.radiusSm, padding: 3, marginBottom: "1.25rem" }}>
-                {["login", "register"].map(m => (
-                  <button key={m} onClick={() => setMode(m)}
-                    style={{ flex: 1, padding: "7px", borderRadius: "5px", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 600, background: mode === m ? T.bgCard : "transparent", color: mode === m ? T.text : T.muted, boxShadow: mode === m ? "0 1px 4px rgba(0,0,0,0.08)" : "none", transition: "all 0.15s" }}>
-                    {m === "login" ? "Sign in" : "Register"}
-                  </button>
-                ))}
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <label style={css.label}>Email</label>
-                <input style={css.input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" autoFocus />
-              </div>
-              <div style={{ marginBottom: 4 }}>
-                <label style={css.label}>Password</label>
-                <input type="password" style={css.input} value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter your password" onKeyDown={e => e.key === "Enter" && submit()} />
-              </div>
-              {mode === "login" && (
-                <div style={{ textAlign: "right", marginBottom: error ? 10 : 18 }}>
-                  <button onClick={() => { setMode("forgot"); setPassword(""); }}
-                    style={{ fontSize: 12, color: T.muted, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}>
-                    Forgot password?
-                  </button>
-                </div>
-              )}
-              {mode === "register" && <div style={{ marginBottom: error ? 10 : 18 }} />}
-              {error && <p style={{ fontSize: 13, color: T.danger, background: T.dangerBg, padding: "8px 12px", borderRadius: T.radiusSm, margin: "0 0 14px" }}>{error}</p>}
-              <Btn variant="primary" onClick={submit} full size="lg" disabled={loading}>
-                {loading ? "Please wait…" : mode === "login" ? "Sign in →" : "Create account →"}
-              </Btn>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─── RESET PASSWORD ─────────────────────────────────────────────────────── */
-function ResetPasswordPage({ onReset }) {
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState("");
-
-  const submit = async () => {
-    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
-    if (password !== confirm) { setError("Passwords don't match."); return; }
-    setLoading(true); setError("");
-    const err = await onReset(password);
-    if (err) { setError(err); setLoading(false); }
-    else setDone(true);
-  };
-
-  return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: T.bg, fontFamily: "inherit", padding: "1rem" }}>
-      <div style={{ width: "100%", maxWidth: 380 }}>
-        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <div style={{ width: 52, height: 52, background: T.accent, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontSize: 24 }}>🏠</div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: T.text, margin: "0 0 6px", letterSpacing: "-0.03em" }}>HomeTracker</h1>
-        </div>
-        <div style={{ ...css.card, padding: "1.75rem", boxShadow: "0 4px 24px rgba(0,0,0,0.07)" }}>
-          {done ? (
-            <div style={{ textAlign: "center", padding: "0.5rem 0" }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
-              <p style={{ fontSize: 15, fontWeight: 600, color: T.text, margin: "0 0 6px" }}>Password updated</p>
-              <p style={{ fontSize: 13, color: T.muted, margin: "0 0 20px" }}>You're now signed in with your new password.</p>
-            </div>
-          ) : (
-            <>
-              <p style={{ fontSize: 14, fontWeight: 600, color: T.text, margin: "0 0 16px" }}>Set a new password</p>
-              <div style={{ marginBottom: 12 }}>
-                <label style={css.label}>New password</label>
-                <input type="password" style={css.input} value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" autoFocus />
-              </div>
-              <div style={{ marginBottom: error ? 10 : 18 }}>
-                <label style={css.label}>Confirm password</label>
-                <input type="password" style={css.input} value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Repeat your password" onKeyDown={e => e.key === "Enter" && submit()} />
-              </div>
-              {error && <p style={{ fontSize: 13, color: T.danger, background: T.dangerBg, padding: "8px 12px", borderRadius: T.radiusSm, margin: "0 0 14px" }}>{error}</p>}
-              <Btn variant="primary" onClick={submit} full size="lg" disabled={loading}>
-                {loading ? "Updating…" : "Update password →"}
-              </Btn>
-            </>
-          )}
+      <div style={{ width: "100%", maxWidth: 380, textAlign: "center" }}>
+        <div style={{ width: 52, height: 52, background: T.accent, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontSize: 24 }}>🏠</div>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: T.text, margin: "0 0 6px", letterSpacing: "-0.03em" }}>HomeTracker</h1>
+        <p style={{ fontSize: 14, color: T.muted, margin: "0 0 28px" }}>Never lose track of where things are kept</p>
+        <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+          <SignInButton mode="modal">
+            <Btn variant="primary" size="lg">Sign in →</Btn>
+          </SignInButton>
+          <SignUpButton mode="modal">
+            <Btn size="lg">Create account</Btn>
+          </SignUpButton>
         </div>
       </div>
     </div>
@@ -372,7 +241,7 @@ function ResetPasswordPage({ onReset }) {
 }
 
 /* ─── SIDEBAR ───────────────────────────────────────────────────────────── */
-function Sidebar({ view, setView, user, onLogout, search, setSearch, searchResults, db, itemLoc, className, onClose }) {
+function Sidebar({ view, setView, user, search, setSearch, searchResults, db, itemLoc, className, onClose }) {
   const nav = [
     { id: "dashboard", icon: "⌂", label: "Houses" },
     { id: "items",     icon: "◫", label: "All items" },
@@ -424,11 +293,10 @@ function Sidebar({ view, setView, user, onLogout, search, setSearch, searchResul
       </nav>
 
       <div style={{ padding: "0.875rem 1rem", borderTop: `1px solid ${T.border}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <Avatar email={user.email} />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <UserButton afterSignOutUrl="/" />
           <span style={{ fontSize: 13, fontWeight: 600, color: T.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName(user.email)}</span>
         </div>
-        <Btn onClick={onLogout} full size="sm" style={{ color: T.muted, fontSize: 12 }}>Sign out</Btn>
       </div>
     </div>
   );
@@ -753,15 +621,13 @@ function ActivityView({ acts }) {
 
 /* ─── APP ────────────────────────────────────────────────────────────────── */
 export default function App() {
+  const { isLoaded, isSignedIn, user: clerkUser } = useUser();
+  const user = isSignedIn ? { id: clerkUser.id, email: clerkUser.primaryEmailAddress?.emailAddress } : null;
+
   const [db, setDb] = useState(emptyDb());
-  const [user, setUser] = useState(null);
   const [view, setView] = useState({ page: "dashboard" });
   const [modal, setModal] = useState(null);
   const [search, setSearch] = useState("");
-  const [appLoading, setAppLoading] = useState(true);
-  const [authLoading, setAuthLoading] = useState(false);
-  const [authErr, setAuthErr] = useState("");
-  const [resetMode, setResetMode] = useState(false);
   const [toast, setToast] = useState({ msg: "", type: "error" });
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -778,41 +644,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) { setUser(session.user); loadData(); }
-      setAppLoading(false);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY") { setUser(session.user); setResetMode(true); }
-      else if (event === "SIGNED_IN" && session) { setUser(session.user); loadData(); }
-      if (event === "SIGNED_OUT") { setUser(null); setDb(emptyDb()); setView({ page: "dashboard" }); setResetMode(false); }
-    });
-    return () => subscription.unsubscribe();
-  }, [loadData]);
-
-  const doLogin = async (email, password) => {
-    setAuthLoading(true); setAuthErr("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setAuthErr(error.message);
-    setAuthLoading(false);
-  };
-  const doRegister = async (email, password) => {
-    setAuthLoading(true); setAuthErr("");
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) setAuthErr(error.message);
-    setAuthLoading(false);
-  };
-  const doLogout = () => supabase.auth.signOut();
-  const doForgotPassword = async (email) => {
-    await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
-  };
-  const doResetPassword = async (password) => {
-    const { error } = await supabase.auth.updateUser({ password });
-    if (error) return error.message;
-    setResetMode(false);
-    loadData();
-    return null;
-  };
+    if (isSignedIn) loadData();
+    else { setDb(emptyDb()); setView({ page: "dashboard" }); }
+  }, [isSignedIn, loadData]);
 
   const logAct = (type, desc) => api.logActivity(type, desc).then(act =>
     setDb(prev => ({ ...prev, acts: [act, ...prev.acts].slice(0, 300) }))).catch(() => {});
@@ -917,11 +751,10 @@ export default function App() {
 
   const fns = { addHouse, addSection, addPlace, addItem, moveItem, sendInvite, showToast };
 
-  if (appLoading) return (
+  if (!isLoaded) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: T.muted, fontFamily: "-apple-system, sans-serif", fontSize: 14 }}>Loading…</div>
   );
-  if (!user) return <AuthPage onLogin={doLogin} onRegister={doRegister} onForgotPassword={doForgotPassword} error={authErr} loading={authLoading} />;
-  if (resetMode) return <ResetPasswordPage onReset={doResetPassword} />;
+  if (!isSignedIn) return <AuthPage />;
 
   const renderView = () => {
     const { page } = view;
@@ -944,7 +777,7 @@ export default function App() {
       </div>
       <div style={{ display: "flex", flex: 1 }}>
         {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
-        <Sidebar className={sidebarOpen ? "sidebar open" : "sidebar"} view={view} setView={setView} user={user} onLogout={doLogout} search={search} setSearch={setSearch} searchResults={searchResults} db={db} itemLoc={itemLoc} onClose={() => setSidebarOpen(false)} />
+        <Sidebar className={sidebarOpen ? "sidebar open" : "sidebar"} view={view} setView={setView} user={user} search={search} setSearch={setSearch} searchResults={searchResults} db={db} itemLoc={itemLoc} onClose={() => setSidebarOpen(false)} />
         <main className="main-pad" style={{ flex: 1, padding: "1.75rem 2rem", minWidth: 0, overflowX: "hidden" }}>
           {renderView()}
         </main>

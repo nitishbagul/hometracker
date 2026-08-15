@@ -1,12 +1,10 @@
-import { supabase } from './supabase'
-
 async function call(method, path, body) {
-  const { data: { session } } = await supabase.auth.getSession()
+  const token = await window.Clerk?.session?.getToken()
   const res = await fetch(path, {
     method,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session?.access_token}`,
+      'Authorization': `Bearer ${token}`,
     },
     body: body ? JSON.stringify(body) : undefined,
   })
